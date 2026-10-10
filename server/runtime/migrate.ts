@@ -1,5 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { PostgresDatabase } from "./postgres-database";
+import { resolve } from "node:path";
 import type { SqliteDatabase } from "./sqlite-database";
 
 /**
@@ -9,7 +11,8 @@ import type { SqliteDatabase } from "./sqlite-database";
  * hand-copied bootstrap schema in src/lib/setup/migration.ts is never used
  * here.
  */
-export async function applyMigrations(database: SqliteDatabase, migrationsDir: string): Promise<string[]> {
+export async function applyMigrations(database: SqliteDatabase | PostgresDatabase, migrationsDir: string): Promise<string[]> {
+	if (database instanceof PostgresDatabase) return database.migrate(resolve(process.env.POSTGRES_MIGRATIONS_DIR ?? "drizzle/postgres"));
 	const db = database.db;
 	db.exec(
 		"CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)",

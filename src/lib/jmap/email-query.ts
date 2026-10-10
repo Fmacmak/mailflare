@@ -28,7 +28,7 @@ function keywordCondition(keyword: string, present: boolean): SQL {
 			return present ? eq(messages.status, "draft") : ne(messages.status, "draft");
 		default:
 			// Unknown keywords are never set, so "has" matches nothing and "not" matches all.
-			return present ? sql`0` : sql`1`;
+			return present ? sql`1 = 0` : sql`1 = 1`;
 	}
 }
 
@@ -55,14 +55,14 @@ function headerCondition(header: string[]): SQL {
 	switch (name) {
 		case "message-id":
 			if (header.length === 1) return isNotNull(messages.providerMessageId);
-			return value ? inArray(messages.providerMessageId, [value, `<${value}>`]) : sql`0`;
+			return value ? inArray(messages.providerMessageId, [value, `<${value}>`]) : sql`1 = 0`;
 		case "in-reply-to":
 			if (header.length === 1) return isNotNull(messages.inReplyTo);
-			return value ? inArray(messages.inReplyTo, [value, `<${value}>`]) : sql`0`;
+			return value ? inArray(messages.inReplyTo, [value, `<${value}>`]) : sql`1 = 0`;
 		case "references":
 			if (header.length === 1) return isNotNull(messages.references);
 			// The column is the space-joined chain, so pad both sides to match whole ids only.
-			return value ? like(sql`' ' || coalesce(${messages.references}, '') || ' '`, `% ${likeEscape(value)} %`) : sql`0`;
+			return value ? like(sql`' ' || coalesce(${messages.references}, '') || ' '`, `% ${likeEscape(value)} %`) : sql`1 = 0`;
 		default:
 			throw unsupportedFilter(`Cannot filter on the ${header[0]} header`);
 	}

@@ -62,3 +62,5 @@ mailflare-landing
 .agents
 skills-lock.json
 /dist/
+
+!.env.selfhosted.example

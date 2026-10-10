@@ -1,3 +1,6 @@
+import { getNodeEnv } from '@/lib/runtime';
+import { postgresBackend } from '@/lib/database/backend';
+import { postgresSearchConditions } from './postgres';
 import { and, eq, exists, gte, lt, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { messageAttachments, messages } from "@/db/schema";
@@ -13,7 +16,9 @@ export function buildSearchConditions(raw: string, timeZone = "UTC"): SQL[] {
 	const conditions: SQL[] = [];
 
 	const match = buildFtsMatch(parsed);
-	if (match) {
+	if (getNodeEnv() && postgresBackend(getNodeEnv()!.DB)) {
+		conditions.push(...postgresSearchConditions(parsed));
+	} else if (match) {
 		conditions.push(sql`${messages}.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${match})`);
 	}
 	if (parsed.hasAttachment) {

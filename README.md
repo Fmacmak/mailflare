@@ -102,6 +102,10 @@ open /setup, create the first admin account, and connect my domain there.
 
 See the [deployment guide](docs/deployment.md) for permissions, manual deployment, backups, and updates.
 
+### Self-host on macOS with PM2
+
+This fork supports a native Node process with PM2, PostgreSQL or SQLite, and local MinIO/S3 storage, plus Resend or a Cloudflare Email Routing relay. Branding is editable on the self-hosted Node runtime. See [macOS / PM2 setup](docs/macos-pm2.md).
+
 ### Self-host with Docker
 
 Mailflare also runs as one container on any server. It uses SQLite and local files instead of D1 and R2.
@@ -152,3 +156,8 @@ To add a language, create `public/locales/<code>.json` with the same keys as `sr
 ## License
 
 See [LICENSE](LICENSE).
+
+### Optional connections
+
+- [WhatsApp](docs/whatsapp.md): personal linked-device QR pairing on the Node runtime.
+- [Buzz](docs/buzz.md): save a team workspace and run its native relay with PM2, a separate PostgreSQL database, Redis and MinIO bucket.

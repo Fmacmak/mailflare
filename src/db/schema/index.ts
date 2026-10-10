@@ -868,7 +868,17 @@ export const driveShares = sqliteTable("drive_shares", {
 	index("drive_shares_user_idx").on(t.userId),
 ]);
 
+/** A user's pointer to their Buzz team; Buzz owns identity and membership. */
+export const buzzConnections = sqliteTable("buzz_connections", {
+	userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+	teamName: text("team_name").notNull(),
+	relayUrl: text("relay_url").notNull(),
+	webUrl: text("web_url").notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
 export const schema = {
+	buzzConnections,
 	users,
 	domains,
 	mailboxes,

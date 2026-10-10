@@ -14,7 +14,7 @@
     "upload": "npm run build && wrangler versions upload",
     "preview": "npm run build && vite preview --port 3000",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
-		"push:keys": "node scripts/generate-vapid-keys.mjs",
+    "push:keys": "node scripts/generate-vapid-keys.mjs",
     "db:bundle": "node scripts/generate-migration-bundle.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
@@ -23,7 +23,13 @@
     "db:seed": "curl -X POST http://localhost:3000/api/seed",
     "build:node": "npm run db:bundle && MAILFLARE_RUNTIME=node next build && node scripts/build-server.mjs",
     "start:node": "MAILFLARE_RUNTIME=node NODE_ENV=production node dist/server.mjs",
-    "dev:node": "npm run db:bundle && node scripts/build-server.mjs && MAILFLARE_RUNTIME=node node dist/server.mjs"
+    "dev:node": "npm run db:bundle && node scripts/build-server.mjs && MAILFLARE_RUNTIME=node node dist/server.mjs",
+    "setup:selfhosted": "node --env-file=.env.selfhosted dist/bootstrap.mjs",
+    "storage:init": "node --env-file=.env.selfhosted scripts/init-storage.mjs",
+    "start:selfhosted": "node --env-file=.env.selfhosted dist/server.mjs",
+    "test:selfhosted": "node --import tsx --test tests/self-hosted/*.test.ts",
+    "test:minio": "node --env-file=.env.selfhosted --import tsx --test tests/self-hosted/minio.integration.ts",
+    "test:postgres": "node --import tsx --test tests/self-hosted/postgres.integration.ts"
   },
   "cloudflare": {
     "bindings": {
@@ -60,6 +66,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.55",
     "@ai-sdk/react": "^4.0.116",
+    "@aws-sdk/client-s3": "^3.1149.0",
     "@modelcontextprotocol/server": "^2.1.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -72,6 +79,7 @@
     "@tanstack/react-query": "^5.100.11",
     "@vinext/cloudflare": "1.0.0-beta.11",
     "ai": "^7.0.113",
+    "baileys": "7.0.0-rc14",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
@@ -87,6 +95,8 @@
     "nodemailer": "^10.0.9",
     "parse-srcset": "^1.0.2",
     "parse5": "^8.0.1",
+    "pg": "^8.23.1",
+    "pino": "9.14.0",
     "postal-mime": "^2.7.4",
     "qrcode": "^1.5.4",
     "react": "^19.2.6",
@@ -112,6 +122,7 @@
     "@types/css-tree": "^3.2.0",
     "@types/node": "^20.19.41",
     "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.7",
     "@types/react-dom": "^19.1.7",

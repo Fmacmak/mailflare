@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readBuzzRuntimeConfig } from '../../deploy/buzz/config.mjs';
+const valid={BUZZ_SOURCE_DIR:'/opt/buzz',BUZZ_DATA_DIR:'/var/buzz',DATABASE_URL:'postgres://buzz:secret@127.0.0.1/buzz',REDIS_URL:'redis://127.0.0.1:6380',BUZZ_RELAY_PRIVATE_KEY:'a'.repeat(64),BUZZ_GIT_HOOK_HMAC_SECRET:'b'.repeat(64),RELAY_OWNER_PUBKEY:'c'.repeat(64),BUZZ_S3_ENDPOINT:'http://127.0.0.1:9000',BUZZ_S3_BUCKET:'buzz-media',BUZZ_S3_ACCESS_KEY:'buzz',BUZZ_S3_SECRET_KEY:'secret',RELAY_URL:'ws://127.0.0.1:3200'};
+test('native Buzz uses separate loopback relay and Redis with durable private team settings',()=>{
+ const config=readBuzzRuntimeConfig(valid);
+ assert.equal(config.relay.command,'/opt/buzz/target/release/buzz-relay');
+ assert.equal(config.env.BUZZ_BIND_ADDR,'127.0.0.1:3200');
+ assert.equal(config.env.BUZZ_HEALTH_PORT,'8083');
+ assert.equal(config.env.BUZZ_REQUIRE_RELAY_MEMBERSHIP,'true');
+ assert.equal(config.env.BUZZ_DB_POOL_SIZE,'5');
+ assert.equal(config.env.BUZZ_WEB_DIR,'/opt/buzz/web/dist');
+ assert.equal(config.redis.args[config.redis.args.indexOf('--bind')+1],'127.0.0.1');
+ assert.equal(config.redis.args[config.redis.args.indexOf('--port')+1],'6380');
+ assert.equal(config.redis.args[config.redis.args.indexOf('--appendonly')+1],'yes');
+});
+test('refuses weak identities, shared Mailflare bucket and unsafe listener configs',()=>{
+ for(const bad of [{RELAY_OWNER_PUBKEY:''},{BUZZ_RELAY_PRIVATE_KEY:'secret'},{DATABASE_URL:''},{BUZZ_REQUIRE_RELAY_MEMBERSHIP:'false'},{BUZZ_BIND_ADDR:'0.0.0.0:3200'},{REDIS_URL:'redis://public.example.com:6380'},{BUZZ_S3_BUCKET:'mailflare',S3_BUCKET:'mailflare'}]) assert.throws(()=>readBuzzRuntimeConfig({...valid,...bad}));
+});
+test('requires explicit matching Redis port and valid relay/health listener ports',()=>{
+ for(const bad of [{REDIS_URL:'redis://127.0.0.1'},{REDIS_URL:'redis://127.0.0.1:0'},{BUZZ_BIND_ADDR:'127.0.0.1:999999'},{BUZZ_BIND_ADDR:'127.0.0.1:0'},{BUZZ_HEALTH_PORT:'0'},{BUZZ_HEALTH_PORT:'65536'},{BUZZ_HEALTH_PORT:'abc'}]) assert.throws(()=>readBuzzRuntimeConfig({...valid,...bad}));
+ const config=readBuzzRuntimeConfig({...valid,REDIS_URL:'redis://127.0.0.1:6381',BUZZ_BIND_ADDR:'127.0.0.1:3201',BUZZ_HEALTH_PORT:'8084'});
+ assert.equal(config.env.REDIS_URL,'redis://127.0.0.1:6381');
+ assert.equal(config.redis.args[config.redis.args.indexOf('--port')+1],'6381');
+ assert.equal(config.env.BUZZ_BIND_ADDR,'127.0.0.1:3201');
+ assert.equal(config.env.BUZZ_HEALTH_PORT,'8084');
+});

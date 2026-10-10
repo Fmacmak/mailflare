@@ -15,8 +15,8 @@ export function getSetupRequirementChecks(env: CloudflareEnv): SetupRequirementC
 			},
 			{
 				key: "Outbound mail",
-				configured: mailer?.configured === true,
-				message: "Set SMTP_URL, or CF_ACCOUNT_ID with CF_TOKEN to send through Cloudflare. Receiving works without it.",
+				configured: mailer?.configured === true || !!env.RESEND_API_KEY?.trim(),
+				message: "Set RESEND_API_KEY for Resend, SMTP_URL for SMTP, or CF_ACCOUNT_ID with CF_TOKEN for Cloudflare.",
 			},
 			{
 				key: "Cloudflare API credentials (optional)",

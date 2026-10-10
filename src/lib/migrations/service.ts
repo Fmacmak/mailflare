@@ -1,3 +1,4 @@
+import { postgresBackend } from '@/lib/database/backend';
 import bundle from "./bundle.json";
 import type { BundledMigration, MigrationNameRow, MigrationResult, MigrationStatus } from "./types";
 
@@ -17,6 +18,8 @@ async function getAppliedMigrationNames(db: D1Database): Promise<string[]> {
 }
 
 export async function getMigrationStatus(db: D1Database): Promise<MigrationStatus> {
+	const postgres = postgresBackend(db);
+	if (postgres) return postgres.migrationStatus();
 	const applied = new Set(await getAppliedMigrationNames(db));
 	const committed = new Set(migrations.map((migration) => migration.name));
 	const pending = migrations.filter((migration) => !applied.has(migration.name)).map((migration) => migration.name);
@@ -26,6 +29,8 @@ export async function getMigrationStatus(db: D1Database): Promise<MigrationStatu
 }
 
 export async function applyPendingMigrations(db: D1Database): Promise<MigrationResult> {
+	const postgres = postgresBackend(db);
+	if (postgres) return postgres.migratePending();
 	const initial = await getMigrationStatus(db);
 	if (initial.unknown.length > 0) {
 		throw new Error("The database contains migrations that are not part of this Mailflare release.");

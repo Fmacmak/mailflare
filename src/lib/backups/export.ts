@@ -2,7 +2,7 @@ import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, D
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
 
-const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", 'ai_usage'];
+const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "mailbox_aliases", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", 'ai_usage', 'drive_items', 'drive_shares', 'drive_upload_parts', 'push_subscriptions', 'buzz_connections'];
 /**
  * Tables every backup document must contain. Tables added to BACKUP_TABLES
  * after the format shipped are absent from older documents, so they stay
@@ -25,6 +25,8 @@ const INTERNAL_TABLE_PATTERNS = ["sqlite_%", "_cf%", "messages_fts%"];
  */
 const INTERNAL_TABLES = [
 	"d1_migrations",
+	// PostgreSQL schema journal is installation metadata, managed by the runtime.
+	"mailflare_pg_migrations",
 	// JMAP state counters, also derived: the jmap_messages_* triggers on
 	// `messages` insert and bump a row per mailbox as messages are restored.
 	// Exporting it would make restore fail, since the triggers recreate these
@@ -62,7 +64,7 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 	if (!includedTables.length) throw new Error("Select at least one backup table group");
 	const tables: DatabaseBackupDocument["tables"] = {};
 	for (const table of includedTables) {
-		if ((table === "shared_attachment_links" || table === "booking_events") && !databaseTables.has(table)) {
+		if (!databaseTables.has(table)) {
 			tables[table] = [];
 			continue;
 		}
@@ -83,7 +85,11 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 	if (!sharedLinksTable && document.tables.shared_attachment_links?.length) throw new Error("Apply pending database migrations before restoring shared attachment links.");
 	const bookingTable = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'booking_events'").first<{ name: string }>();
 	if (!bookingTable && document.tables.booking_events?.length) throw new Error("Apply pending database migrations before restoring booking events.");
-	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable));
+	const existingTables = await assertBackupTablesCoverDatabase(db);
+	for (const table of BACKUP_TABLES) {
+		if (!existingTables.has(table) && document.tables[table]?.length) throw new Error(`Apply pending database migrations before restoring ${table}.`);
+	}
+	const restoreTables = BACKUP_TABLES.filter((table) => existingTables.has(table));
 	const userColumns = new Set((await db.prepare("PRAGMA table_info(users)").all<{ name: string }>()).results.map((column) => column.name));
 	const bookingColumns = bookingTable ? new Set((await db.prepare("PRAGMA table_info(booking_events)").all<{ name: string }>()).results.map((column) => column.name)) : null;
 	for (const table of [...restoreTables].reverse()) await db.prepare(`DELETE FROM ${table}`).run();

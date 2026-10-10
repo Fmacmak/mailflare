@@ -50,6 +50,7 @@ import {
 import { NavSectionHeader, useSectionOpen } from "./nav-section-header";
 import { ReorderableList } from "./reorderable-list";
 import { readStorage, writeStorage } from "./reorderable-list-utils";
+import { IntegrationsNav } from "./integrations-nav";
 import { SidebarFooter } from "./sidebar-footer";
 import { SidebarHeader } from "./sidebar-header";
 import { SidebarScaffold } from "./sidebar-scaffold";
@@ -352,6 +353,7 @@ export function DashboardNav({ className }: { className?: string }) {
         }]}
       />}
       {foldersSectionOpen && foldersOverflow && <NavToggle expanded={foldersOpen} onClick={toggleFolders} />}
+      <IntegrationsNav />
     </SidebarScaffold>
   );
 }

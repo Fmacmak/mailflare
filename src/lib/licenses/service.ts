@@ -1,3 +1,4 @@
+import { hasBrandingAccess } from "@/lib/branding/access";
 import { eq } from "drizzle-orm";
 import packageJson from "../../../package.json";
 import { getDb } from "@/db";
@@ -49,14 +50,14 @@ export async function getLicenseEntitlements(env: CloudflareEnv): Promise<Licens
 		// Pro adds accounts up to its seat limit; Team is unlimited and also unlocks shared mailboxes.
 		return {
 			plan: status.plan,
-			canCustomizeBranding: status.active,
+			canCustomizeBranding: hasBrandingAccess(env, status.active),
 			canManageAccounts: status.active,
 			canShareMailboxes: status.active && status.plan === "team",
 			accountSeatLimit: status.seatLimit,
 			canForwardEmail: status.active,
 		};
 	} catch {
-		return { plan: "community", canCustomizeBranding: false, canManageAccounts: false, canShareMailboxes: false, accountSeatLimit: 0, canForwardEmail: false };
+		return { plan: "community", canCustomizeBranding: hasBrandingAccess(env, false), canManageAccounts: false, canShareMailboxes: false, accountSeatLimit: 0, canForwardEmail: false };
 	}
 }
 

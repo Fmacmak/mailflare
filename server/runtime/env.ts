@@ -1,11 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { openFileBucket } from "./file-bucket";
+import { openS3Bucket } from "./s3-bucket";
+import { readStorageConfig } from "./storage-config";
 import { openMailer, type Mailer, type MailerConfig } from "./mailer";
 import { openAssets, openRateLimiter } from "./misc";
 import { openQueue, type InProcessQueue } from "./queue";
 import { RealtimeHubRegistry } from "./realtime";
 import { openSqliteDatabase, type SqliteDatabase } from "./sqlite-database";
+import { PostgresDatabase } from "./postgres-database";
 import type { NodeRuntime } from "./types";
 
 function optional(name: string): string | undefined {
@@ -31,8 +34,14 @@ export function createNodeRuntime(): NodeRuntime {
 	const dataDir = resolve(optional("DATA_DIR") ?? "./data");
 	mkdirSync(join(dataDir, "blobs"), { recursive: true });
 
-	const database = openSqliteDatabase(join(dataDir, "mailflare.sqlite"));
-	const bucket = openFileBucket(join(dataDir, "blobs"));
+	const backend = optional("DATABASE_BACKEND") ?? "sqlite";
+	if (!["sqlite", "postgres"].includes(backend)) throw new Error("DATABASE_BACKEND must be sqlite or postgres");
+	if (backend === "postgres" && !optional("DATABASE_URL")) throw new Error("DATABASE_URL is required for PostgreSQL");
+	const database = backend === "postgres"
+		? new PostgresDatabase(optional("DATABASE_URL")!, Number(optional("DATABASE_POOL_SIZE") ?? 4))
+		: openSqliteDatabase(join(dataDir, "mailflare.sqlite"));
+	const storage = readStorageConfig();
+	const bucket = storage.kind === "s3" ? openS3Bucket(storage) : openFileBucket(join(dataDir, "blobs"));
 	const mailer = openMailer(mailerConfig());
 	const inboundQueue = openQueue("mailflare-inbound");
 	const outboundQueue = openQueue("mailflare-outbound");
@@ -57,6 +66,8 @@ export function createNodeRuntime(): NodeRuntime {
 		LOGIN_RATE_LIMIT: openRateLimiter(20, 60),
 		AGENT_RATE_LIMIT: openRateLimiter(120, 60),
 		CF_TOKEN: optional("CF_TOKEN"),
+		CF_ACCOUNT_ID: optional("CF_ACCOUNT_ID"),
+		RESEND_API_KEY: optional("RESEND_API_KEY"),
 		CF_API_KEY: optional("CF_API_KEY"),
 		CF_EMAIL: optional("CF_EMAIL"),
 		TURNSTILE_SECRET_KEY: optional("TURNSTILE_SECRET_KEY"),
@@ -76,7 +87,7 @@ export function createNodeRuntime(): NodeRuntime {
 	return {
 		env,
 		dataDir,
-		database: database as unknown as SqliteDatabase,
+		database: database as unknown as SqliteDatabase | PostgresDatabase,
 		mailer: mailer as unknown as Mailer,
 		inboundQueue: inboundQueue as unknown as InProcessQueue,
 		outboundQueue: outboundQueue as unknown as InProcessQueue,

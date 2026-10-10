@@ -13,6 +13,8 @@ import { isInboundQueueMessage, isWebhookRetryMessage } from "../worker-utils";
 import { createNodeRuntime } from "./runtime/env";
 import { applyMigrations } from "./runtime/migrate";
 import { startScheduler } from "./runtime/scheduler";
+import { WhatsAppRegistry } from "./runtime/whatsapp";
+import { setWhatsAppRegistry } from "@/lib/whatsapp/runtime";
 import { startSmtpListener } from "./runtime/smtp";
 
 /**
@@ -41,6 +43,12 @@ async function main() {
 	runtime.agentQueue.setConsumer(async (body) => {
 		if (typeof body === "object" && body !== null && (body as { kind?: unknown }).kind === "agent.draft" && typeof (body as { jobId?: unknown }).jobId === "string") await processAgentDraftJob(env, (body as { jobId: string }).jobId);
 	});
+
+	const whatsapp = process.env.WHATSAPP_ENABLED === "true"
+		? new WhatsAppRegistry(runtime.dataDir, Number(process.env.WHATSAPP_MAX_SESSIONS ?? 4))
+		: undefined;
+	setWhatsAppRegistry(whatsapp);
+	if (whatsapp) await whatsapp.restore(async (userId) => !!await env.DB.prepare("SELECT id FROM users WHERE id = ? AND disabled = 0").bind(userId).first());
 
 	const app = next({ dev, dir: process.cwd(), hostname: host, port });
 	const handle = app.getRequestHandler();
@@ -92,7 +100,13 @@ async function main() {
 		runtime.inboundQueue.stop();
 		runtime.outboundQueue.stop();
 		runtime.agentQueue.stop();
-		server.close(() => process.exit(0));
+		const stopWhatsApp = whatsapp?.close() ?? Promise.resolve();
+		setWhatsAppRegistry(undefined);
+		server.close(async () => {
+			await stopWhatsApp;
+			if ("close" in runtime.database) await runtime.database.close(); else runtime.database.db.close();
+			process.exit(0);
+		});
 		setTimeout(() => process.exit(0), 5000).unref();
 	};
 	process.on("SIGTERM", shutdown);
