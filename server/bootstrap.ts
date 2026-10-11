@@ -14,6 +14,11 @@ const database = backend === 'postgres'
  : new SqliteDatabase(join(dataDir,'mailflare.sqlite'));
 try {
  await applyMigrations(database,resolve('drizzle/migrations'));
+ const existing = process.argv.includes('--if-needed') && await database.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").first();
+ if (existing) {
+  console.log('An admin already exists; bootstrap skipped without changing the account.');
+ } else {
  const result = await bootstrapAdmin(database,{email:process.env.MAILFLARE_ADMIN_EMAIL || '',password:process.env.MAILFLARE_ADMIN_PASSWORD || '',appName:process.env.MAILFLARE_BRAND_NAME,receivingProvider:process.env.MAILFLARE_RECEIVING_PROVIDER as "resend"|"cloudflare"|undefined});
  console.log(`Created admin ${result.email}. Log in, then finish Resend setup under Admin > Domains. No external services or DNS records were changed.`);
+ }
 } finally { if (database instanceof PostgresDatabase) await database.close(); else database.db.close(); }

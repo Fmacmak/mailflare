@@ -1,6 +1,6 @@
 const path = require('node:path');
 const root = __dirname;
-const envFile = path.join(root, '.env.selfhosted');
+const envFile = process.env.MAILFLARE_ENV_FILE || path.join(root, '.env.selfhosted');
 const common = {
  cwd: root, interpreter: process.execPath, node_args: [`--env-file=${envFile}`],
  instances: 1, exec_mode: 'fork', autorestart: true, restart_delay: 5000,

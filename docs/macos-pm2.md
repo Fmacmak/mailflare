@@ -2,6 +2,8 @@
 
 This fork can run on an M1 Mac with 8 GB RAM, alongside Umami. Mailflare uses one Node process on `127.0.0.1:3100`, either SQLite under `data/mailflare` or a dedicated PostgreSQL database, and an S3-compatible private bucket. The included PM2 configuration runs MinIO on `127.0.0.1:9000` with its console on `127.0.0.1:9001`. No Docker, D1 or R2 is required. Use a current Node 22 patch release or newer supported Node version; this checkout was verified with Node 26.7.0.
 
+For an interactive installer and configuration CLI, start with [the setup CLI guide](setup-cli.md). The steps below remain available for manual setup.
+
 ## 1. Install and build
 
 On the spare laptop, use this modified checkout (or clone your fork after these changes have been published), then:

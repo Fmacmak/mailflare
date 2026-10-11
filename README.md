@@ -161,3 +161,5 @@ See [LICENSE](LICENSE).
 
 - [WhatsApp](docs/whatsapp.md): personal linked-device QR pairing on the Node runtime.
 - [Buzz](docs/buzz.md): save a team workspace and run its native relay with PM2, a separate PostgreSQL database, Redis and MinIO bucket.
+
+For guided native installation and interactive configuration, see [Setup CLI](docs/setup-cli.md) or run `bash scripts/setup-macos.sh --help`.
