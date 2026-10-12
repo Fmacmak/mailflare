@@ -31,7 +31,9 @@
     "test:minio": "node --env-file=.env.selfhosted --import tsx --test tests/self-hosted/minio.integration.ts",
     "test:postgres": "node --import tsx --test tests/self-hosted/postgres.integration.ts",
     "selfhost": "node scripts/selfhost.mjs",
-    "test:setup": "npm run db:bundle && node scripts/build-server.mjs && node --test tests/setup/*.test.mjs"
+    "test:setup": "npm run db:bundle && node scripts/build-server.mjs && node --test tests/setup/*.test.mjs",
+    "setup:macos": "bash scripts/setup-macos.sh",
+    "setup:macos:all": "bash scripts/setup-macos.sh --install-tools --with-buzz"
   },
   "cloudflare": {
     "bindings": {

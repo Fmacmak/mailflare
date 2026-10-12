@@ -89,7 +89,7 @@ async function down(){for(const name of ['mailflare','mailflare-minio'])if(await
 async function buzzConfigure(){
  const env=config(),old=readPrivateEnv(buzzFile);const supplied=await patchInput();
  let patch=supplied;
- if(!patch){patch={};for(const [key,label,value]of [['BUZZ_SOURCE_DIR','External Buzz checkout',old.BUZZ_SOURCE_DIR || join(process.env.HOME,'buzz')],['BUZZ_DATA_DIR','Buzz data folder',old.BUZZ_DATA_DIR || join(process.env.HOME,'buzz-data')],['DATABASE_URL','Dedicated Buzz PostgreSQL URL',old.DATABASE_URL || ''],['RELAY_URL','Public WSS relay origin or local WS origin',old.RELAY_URL || 'ws://127.0.0.1:3200'],['RELAY_OWNER_PUBKEY','Your public Buzz/Nostr owner key (64 hex)',old.RELAY_OWNER_PUBKEY || '']])patch[key]=await ask(label,value,secretKeys.has(key));}
+ if(!patch){patch={};for(const [key,label,value]of [['BUZZ_SOURCE_DIR','External Buzz checkout',old.BUZZ_SOURCE_DIR || join(process.env.HOME,'buzz')],['BUZZ_DATA_DIR','Buzz data folder',old.BUZZ_DATA_DIR || join(process.env.HOME,'buzz-data')],['DATABASE_URL','Buzz database URL on your existing PostgreSQL server',old.DATABASE_URL || ''],['BUZZ_REDIS_MODE','Redis: existing Homebrew service or managed PM2 instance',old.BUZZ_REDIS_MODE || 'existing'],['REDIS_URL','Local Redis URL with an unused logical database',old.REDIS_URL || 'redis://127.0.0.1:6379/1'],['RELAY_URL','Public WSS relay origin or local WS origin',old.RELAY_URL || 'ws://127.0.0.1:3200'],['RELAY_OWNER_PUBKEY','Your public Buzz/Nostr owner key (64 hex)',old.RELAY_OWNER_PUBKEY || '']])patch[key]=await ask(label,value,secretKeys.has(key));}
  const defaults=readPrivateEnv(join(root,'deploy/buzz/env.example'));
  const allowed=new Set([...Object.keys(defaults),'BUZZ_REDIS_BINARY']);for(const key of Object.keys(patch))if(!allowed.has(key))throw new Error(`Unknown Buzz key ${key}.`);
  const value={...defaults,...old,...patch};
@@ -110,10 +110,22 @@ async function buzzBuild(){
 }
 async function buzzUp(){
  const env=buzzConfig();
- for(const [name,ports]of [['buzz-redis',[Number(new URL(env.REDIS_URL).port)]],['buzz-relay',[Number(env.BUZZ_BIND_ADDR?.split(':').at(-1) || 3200),Number(env.BUZZ_HEALTH_PORT || 8083)]]]){const app=await managed(name);for(const port of ports)await assertPortAvailable(port,app?.pm2_env.status==='online');}
+ const runtime=readBuzzRuntimeConfig(env);
+ const portsToCheck=[['buzz-relay',[Number(env.BUZZ_BIND_ADDR?.split(':').at(-1) || 3200),Number(env.BUZZ_HEALTH_PORT || 8083)]]];
+ if(runtime.env.BUZZ_REDIS_MODE==='managed')portsToCheck.push(['buzz-redis',[Number(new URL(env.REDIS_URL).port)]]);
+ for(const [name,ports]of portsToCheck){const app=await managed(name);for(const port of ports)await assertPortAvailable(port,app?.pm2_env.status==='online');}
  await wait('http://127.0.0.1:9000/minio/health/live');
  await run(process.execPath,['scripts/init-storage.mjs'],{S3_ENDPOINT:env.BUZZ_S3_ENDPOINT,S3_BUCKET:env.BUZZ_S3_BUCKET,S3_ACCESS_KEY_ID:env.BUZZ_S3_ACCESS_KEY,S3_SECRET_ACCESS_KEY:env.BUZZ_S3_SECRET_KEY,S3_REGION:env.BUZZ_S3_REGION});
- await start('buzz-redis','deploy/buzz/ecosystem.config.cjs',{});
+ if(runtime.env.BUZZ_REDIS_MODE==='managed')await start('buzz-redis','deploy/buzz/ecosystem.config.cjs',{});
+ const redis=new URL(env.REDIS_URL);
+ const pingArgs=['-h',redis.hostname.replace(/^\[|\]$/g,''),'-p',redis.port,'-n',redis.pathname.slice(1) || '0'];
+ if(redis.username)pingArgs.push('--user',decodeURIComponent(redis.username));
+ let ready=false;
+ for(let attempt=0;attempt<(runtime.env.BUZZ_REDIS_MODE==='managed'?10:1);attempt++){
+  try{const pong=await run('redis-cli',[...pingArgs,'PING'],{REDISCLI_AUTH:decodeURIComponent(redis.password)},root,true);if(pong.trim()==='PONG'){ready=true;break;}}catch{}
+  if(runtime.env.BUZZ_REDIS_MODE==='managed')await new Promise(res=>setTimeout(res,1000));
+ }
+ if(!ready)throw new Error('Redis did not respond to PING. Check redis-cli, the Homebrew service, selected DB and credentials.');
  // Upstream migrations connect to PG; Redis starts before the relay.
  await run(process.execPath,['--env-file='+buzzFile,'deploy/buzz/run.mjs','admin','migrate']);
  await start('buzz-relay','deploy/buzz/ecosystem.config.cjs',{});await wait(`http://${env.BUZZ_BIND_ADDR || '127.0.0.1:3200'}`);
@@ -141,7 +153,7 @@ const help=`Mailflare native setup (Node 24+, no Docker)
   buzz:configure         Configure optional native Buzz (also accepts --input-json)
   buzz:db:create         Create separate buzz database/role
   buzz:build             Clone pinned Buzz, build Rust and pnpm web client
-  buzz:up / buzz:down    Manage Buzz + isolated Redis via PM2
+  buzz:up / buzz:down    Manage Buzz; Redis is controlled only in managed mode
 Secrets are prompted without echo. --input-json - reads private JSON from stdin.
 Database admin credentials: prompt or MAILFLARE_PG_ADMIN_URL environment variable.
 Cloudflare Tunnel, domain/MX setup, and owner phone/identity steps: docs/setup-cli.md.`;
@@ -154,7 +166,7 @@ try{
  case 'up':await up();break;case 'down':await down();break;case 'bootstrap':config();await bootstrap();break;
  case 'doctor':await doctor();break;case 'status':await run('pm2',['list']);break;
  case 'buzz:configure':await buzzConfigure();break;case 'buzz:db:create':await database(buzzConfig().DATABASE_URL);break;case 'buzz:build':await buzzBuild();break;case 'buzz:up':await buzzUp();break;
- case 'buzz:down':for(const name of ['buzz-relay','buzz-redis'])if(await managed(name))await run('pm2',['stop',name]);break;
+ case 'buzz:down':for(const kind of [...readBuzzRuntimeConfig(buzzConfig()).managedKinds].reverse()){const name=`buzz-${kind}`;if(await managed(name))await run('pm2',['stop',name]);}break;
  default:throw new Error('Unknown command; run help.');
  }
 }catch(error){console.error(`Setup: ${error.message}`);process.exitCode=1;}finally{rl?.close();}

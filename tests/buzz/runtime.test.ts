@@ -25,3 +25,28 @@ test('requires explicit matching Redis port and valid relay/health listener port
  assert.equal(config.env.BUZZ_BIND_ADDR,'127.0.0.1:3201');
  assert.equal(config.env.BUZZ_HEALTH_PORT,'8084');
 });
+test('existing Homebrew Redis accepts a separate logical database and authentication',()=>{
+ const config=readBuzzRuntimeConfig({...valid,BUZZ_REDIS_MODE:'existing',REDIS_URL:'redis://buzz:local-secret@localhost:6379/1'});
+ assert.equal(config.env.BUZZ_REDIS_MODE,'existing');
+ assert.equal(config.env.REDIS_URL,'redis://buzz:local-secret@localhost:6379/1');
+ assert.deepEqual(config.managedKinds,['relay']);
+});
+test('external Redis remains private and bundled Redis cannot use shared service settings',()=>{
+ for(const bad of [{BUZZ_REDIS_MODE:'unknown'},{BUZZ_REDIS_MODE:'existing',REDIS_URL:'redis://public.example:6379/1'},{BUZZ_REDIS_MODE:'existing',REDIS_URL:'redis://localhost:6379/-1'},{BUZZ_REDIS_MODE:'existing',REDIS_URL:'redis://localhost:6379/1?ignored=true'},{BUZZ_REDIS_MODE:'managed',REDIS_URL:'redis://localhost:6379/1'}])assert.throws(()=>readBuzzRuntimeConfig({...valid,...bad}));
+ assert.deepEqual(readBuzzRuntimeConfig(valid).managedKinds,['redis','relay']);
+});
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+import { writePrivateEnv } from '../../scripts/selfhost/config.mjs';
+test('PM2 ecosystem excludes Homebrew Redis and wrapper refuses to launch it',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'buzz-existing-')),file=join(directory,'ecosystem.config.cjs');
+ writeFileSync(file,readFileSync(new URL('../../deploy/buzz/ecosystem.config.cjs',import.meta.url)));
+ writePrivateEnv(join(directory,'.env'),{...valid,BUZZ_REDIS_MODE:'existing',REDIS_URL:'redis://localhost:6379/1'});
+ const ecosystem=createRequire(import.meta.url)(file);
+ assert.deepEqual(ecosystem.apps.map((app:{name:string})=>app.name),['buzz-relay']);
+ const result=spawnSync(process.execPath,['--env-file='+join(directory,'.env'),'deploy/buzz/run.mjs','redis'],{encoding:'utf8'});
+ assert.equal(result.status,1);assert.match(result.stderr,/externally managed/);
+});

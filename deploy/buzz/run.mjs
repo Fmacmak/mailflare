@@ -5,6 +5,7 @@ import { readBuzzRuntimeConfig } from './config.mjs';
 const kind = process.argv[2];
 if (!['relay','redis','admin'].includes(kind)) throw new Error('Usage: node --env-file=deploy/buzz/.env deploy/buzz/run.mjs relay|redis|admin [arguments]');
 const config = readBuzzRuntimeConfig();
+if (kind === 'redis' && config.env.BUZZ_REDIS_MODE === 'existing') throw new Error('Redis is externally managed; start it with Homebrew instead.');
 mkdirSync(config.data,{recursive:true,mode:0o700});
 mkdirSync(config.redisData,{recursive:true,mode:0o700});
 const spec = kind === 'admin' ? {command:config.relay.command.replace(/buzz-relay$/, 'buzz-admin'),args:process.argv.slice(3)} : config[kind];

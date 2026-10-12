@@ -32,8 +32,8 @@ chat. The PM2 memory limit applies to the Node launcher, not its Rust child;
 use Activity Monitor to observe the relay and Redis themselves.
 
 1. Install Xcode Command Line Tools, Git, Rust/rustup, Node 24+, pnpm 10 and Redis.
-   Use Homebrew `brew install redis` for Redis. Do not start its default service
-   if you intend to use the dedicated PM2 Redis below. Buzz already uses pnpm.
+   Use Homebrew `brew install redis` for Redis. An existing Homebrew Redis service
+   can be reused; the isolated PM2 Redis below is optional. Buzz already uses pnpm.
 2. Clone Buzz outside Mailflare and pin the inspected revision:
 
    ```sh
@@ -49,7 +49,8 @@ use Activity Monitor to observe the relay and Redis themselves.
    The pinned checkout’s `rust-toolchain.toml` selects Rust 1.95.0. Runtime SQLx
    queries do not require a running database to compile. Do not use `just setup`:
    upstream’s quick-start command starts Docker services.
-3. On the existing PostgreSQL server, create a **separate** `buzz` role and `buzz`
+3. Reuse the same PostgreSQL **server** as Umami and Mailflare; no new PostgreSQL
+   process is needed. Create a dedicated `buzz` role and `buzz`
    database owned by that role. Keep Umami and Mailflare database credentials
    separate. With a PostgreSQL administrative connection:
 
@@ -74,16 +75,36 @@ use Activity Monitor to observe the relay and Redis themselves.
    key in your password manager. Set `RELAY_OWNER_PUBKEY` to your **public hex
    key** and sign in to Buzz with that identity. Never paste the private key into
    Mailflare. This launcher requires a private, membership-restricted team.
-7. Start the isolated Redis instance, run migrations once, then start the relay:
+7. Reuse Homebrew Redis (the new configuration default):
+
+   ```dotenv
+   BUZZ_REDIS_MODE=existing
+   REDIS_URL=redis://127.0.0.1:6379/1
+   ```
+
+   Choose an unused logical database; 1 is an example. If the service is stopped,
+   run `brew services start redis`. Check it with `redis-cli -n 1 PING`.
+   Authenticated local Redis URLs are supported. The CLI and PM2 do not start,
+   stop or reconfigure this service. Redis Pub/Sub channels and memory policies
+   span logical databases; avoid multiple independent Buzz deployments on the
+   same Redis without reviewing their namespaces. Existing-service persistence
+   and memory settings are managed through Homebrew's Redis configuration.
+
+   For an isolated Redis instead, set `BUZZ_REDIS_MODE=managed` and
+   `REDIS_URL=redis://127.0.0.1:6380/0`, then run the optional PM2 command below.
+   Files without a mode retain the original managed behavior.
+
+   Run migrations once, then start the relay:
 
    ```sh
-   pm2 start deploy/buzz/ecosystem.config.cjs --only buzz-redis
+   # Only when BUZZ_REDIS_MODE=managed:
+   # pm2 start deploy/buzz/ecosystem.config.cjs --only buzz-redis
    node --env-file=deploy/buzz/.env deploy/buzz/run.mjs admin migrate
    pm2 start deploy/buzz/ecosystem.config.cjs --only buzz-relay
    pm2 logs buzz-relay
    ```
 
-   Use the same modern Node PATH used for Mailflare. Redis binds
+   Use the same modern Node PATH used for Mailflare. In managed mode, Redis binds
    `127.0.0.1:6380`, uses append-only persistence under `BUZZ_DATA_DIR/redis`, and
    has a 128 MB cap with `noeviction` so membership/coordination keys are not
    silently discarded. Memory-full errors need operator attention. The relay
@@ -117,8 +138,10 @@ Set up the existing PM2 login/startup flow on macOS so processes survive a reboo
 
 ## Backups, updates and verification
 
-Back up Buzz PostgreSQL with `pg_dump`, its MinIO bucket, `BUZZ_DATA_DIR` (Redis AOF,
-Git data/cache as needed), and its `.env` secrets securely. Back up the Buzz user’s
+Back up the dedicated Buzz database with `pg_dump`, its MinIO bucket,
+`BUZZ_DATA_DIR` (Git data/cache and managed Redis AOF), and its `.env` secrets
+securely. For existing Homebrew Redis, include its persistence files in the
+service backup instead. Back up the Buzz user’s
 private identity key independently. A Mailflare database backup includes saved
 workspace links; it does not include Buzz’s own database or objects.
 

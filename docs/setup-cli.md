@@ -2,8 +2,9 @@
 
 Run this from your fork on the spare Mac. It uses npm for Mailflare, PM2 for the
 application and MinIO, and your existing PostgreSQL server alongside Umami.
-Buzz is optional and uses Rust, pnpm, a separate PostgreSQL database/bucket and
-its own Redis process. No Docker, D1 or R2 is needed.
+Buzz is optional and uses Rust and pnpm. It shares your existing PostgreSQL
+server with its own `buzz` database/role and uses a separate MinIO bucket. Redis
+can be your existing Homebrew service; an isolated PM2 Redis is also supported. No Docker, D1 or R2 is needed.
 
 ## Quick start
 
@@ -13,7 +14,9 @@ Clone the fork and enter its folder. Install Xcode Command Line Tools if missing
 ```sh
 git clone https://github.com/Fmacmak/mailflare.git
 cd mailflare
-bash scripts/setup-macos.sh --install-tools
+# With Node 24+ and npm already on PATH:
+npm run setup:macos -- --install-tools
+# Without Node/npm yet, use: bash scripts/setup-macos.sh --install-tools
 ```
 
 The installer installs Node 24, Go, PostgreSQL client tools and cloudflared with
@@ -26,7 +29,7 @@ If the tools are already installed and in PATH, omit `--install-tools`.
 To include a new Buzz instance, use:
 
 ```sh
-bash scripts/setup-macos.sh --install-tools --with-buzz
+npm run setup:macos:all
 ```
 
 The prompts request:
@@ -105,7 +108,8 @@ the PM2 launcher receives that path. PM2 names remain `mailflare` and
 instances. Use `PM2_HOME` consistently if you already use an isolated PM2 daemon.
 The CLI refuses to stop/restart a same-named PM2 app owned by another checkout.
 `down` stops only those two processes; shared PostgreSQL and Umami remain running.
-Stop Buzz separately with `buzz:down`. No command deletes stored data.
+Stop Buzz separately with `buzz:down`; in existing Redis mode this stops only
+the relay and leaves Homebrew Redis running. No command deletes stored data.
 
 For updates, stop Mailflare before replacing its build. Back up the dedicated
 PostgreSQL database and MinIO objects first:
@@ -167,8 +171,9 @@ See the [provider setup guide](macos-pm2.md#5-choose-how-to-receive).
 
 ## Optional Buzz and WhatsApp
 
-Buzz prompts additionally request separate source/data directories, database URL,
-relay WSS origin, and your **public** Nostr owner key. Its relay secret and Git
+Buzz prompts additionally request source/data directories, a `buzz` database URL
+on the existing PostgreSQL server, Redis mode/URL, relay WSS origin, and your
+**public** Nostr owner key. Its relay secret and Git
 HMAC secret are generated once. The owner identity's private key is never
 requested by Mailflare. Establish your owner identity first following
 [Buzz's guide](buzz.md); its key-generation command requires the native admin
@@ -182,6 +187,30 @@ npm run selfhost -- buzz:build
 npm run selfhost -- buzz:up
 npm run selfhost -- buzz:down
 ```
+
+For an existing Homebrew Redis service, set these in `deploy/buzz/.env` (or use
+`buzz:configure`):
+
+```dotenv
+BUZZ_REDIS_MODE=existing
+REDIS_URL=redis://127.0.0.1:6379/1
+```
+
+Choose an unused logical database (1 is an example; check your other apps). Buzz
+checks Redis with `redis-cli PING` before starting. If Redis is installed but
+stopped, start it with `brew services start redis`. The CLI never starts, stops
+or changes Homebrew Redis settings. An authenticated local Redis URL is also
+supported; enter its password through the hidden URL prompt.
+
+For a separate PM2 instance instead, set `BUZZ_REDIS_MODE=managed` and
+`REDIS_URL=redis://127.0.0.1:6380/0`. Older configuration files without a mode
+keep the original managed behavior. When switching from managed to existing,
+stop the old `buzz-redis` PM2 process explicitly first; it is not a Homebrew
+service. Redis logical databases separate keys, but Pub/Sub channels and memory
+policies remain shared. Run only one Buzz team deployment against this shared
+Redis unless you have reviewed its channel namespaces. Configure persistence
+and `noeviction` on the existing service as appropriate for all its apps; the
+launcher applies its own AOF/memory settings only in managed mode.
 
 The CLI clones the inspected Buzz revision only into a missing directory. It
 refuses a different existing revision instead of resetting local work. Rust is

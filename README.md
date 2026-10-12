@@ -4,6 +4,54 @@
 
 Mailflare is a self-hosted email inbox for custom domains, built on Cloudflare. Supports **Resend**, or **AWS SES**
 
+## Quick start: native macOS / PM2
+
+This fork can run on your Mac alongside Umami, sharing its PostgreSQL server
+through separate databases and using local MinIO. No Docker, D1 or R2 is needed.
+
+Install [Homebrew](https://brew.sh), Xcode Command Line Tools, and Node 24+ first.
+For Homebrew Node: `brew install node@24`, then add
+`$(brew --prefix node@24)/bin` to your PATH. Your existing PostgreSQL server should
+already be running.
+
+```sh
+git clone --depth 1 --single-branch --branch main https://github.com/Fmacmak/mailflare.git
+cd mailflare
+npm run setup:macos -- --install-tools
+```
+
+The installer prompts privately for configuration, installs tools/dependencies,
+builds Mailflare and MinIO, provisions its dedicated database, creates the first
+admin, and starts both services through PM2. Open `http://127.0.0.1:3100/login`.
+Finish name/logo customization in **Admin > Branding**, and provider setup in
+**Admin > Domains**. Add your chosen HTTPS hostname to the existing Cloudflare
+Tunnel; the installer does not change live DNS or tunnel routes.
+
+To also build and start a new Buzz instance:
+
+```sh
+npm run setup:macos:all
+```
+
+Buzz needs your owner public identity key, its own database on the same PostgreSQL
+server, and a running Homebrew Redis service (or the optional PM2-managed Redis).
+See the [setup guide](docs/setup-cli.md#optional-buzz-and-whatsapp) for identity
+preparation before this command. Enable WhatsApp pairing in the configuration
+prompts and scan the QR from its sidebar page.
+
+```sh
+npm run selfhost -- configure  # edit configuration
+npm run selfhost -- doctor     # check dependencies and configuration
+npm run selfhost -- down       # stop Mailflare and MinIO; shared PG stays running
+npm run selfhost -- buzz:down  # stop Buzz; existing Homebrew Redis stays running
+```
+
+If Node/npm is not yet available, start directly with
+`bash scripts/setup-macos.sh --install-tools` after installing Homebrew.
+`npm run setup:selfhosted` is only the one-time admin bootstrap, not the full
+installer. For backups, updates, unattended config and all options, see the
+[setup CLI guide](docs/setup-cli.md).
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
 
 ## Screenshots

@@ -3,7 +3,12 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const envFile = path.join(__dirname, '.env');
 const node = process.env.BUZZ_NODE_BINARY || process.execPath;
-module.exports = { apps: ['redis', 'relay'].map(kind => ({
+const fs = require('node:fs');
+const settings = fs.existsSync(envFile) ? require('node:util').parseEnv(fs.readFileSync(envFile, 'utf8')) : {};
+const mode = settings.BUZZ_REDIS_MODE || process.env.BUZZ_REDIS_MODE || 'managed';
+if (!['managed', 'existing'].includes(mode)) throw new Error('BUZZ_REDIS_MODE must be managed or existing.');
+const kinds = mode === 'existing' ? ['relay'] : ['redis', 'relay'];
+module.exports = { apps: kinds.map(kind => ({
  name: `buzz-${kind}`,
  cwd: root,
  script: path.join(__dirname, 'run.mjs'),
