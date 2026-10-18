@@ -3,8 +3,8 @@ import { existsSync, readFileSync, writeFileSync, renameSync, chmodSync, lstatSy
 import { dirname, resolve, join } from 'node:path';
 import { homedir } from 'node:os';
 import { parseEnv } from 'node:util';
-const keys = new Set(['NODE_ENV','MAILFLARE_RUNTIME','HOST','PORT','DATA_DIR','DATABASE_BACKEND','DATABASE_URL','DATABASE_POOL_SIZE','APP_URL','SMTP_INBOUND_PORT','RESEND_API_KEY','CF_TOKEN','INBOUND_WEBHOOK_SECRET','STORAGE_BACKEND','S3_ENDPOINT','S3_REGION','S3_BUCKET','S3_ACCESS_KEY_ID','S3_SECRET_ACCESS_KEY','MINIO_ROOT_USER','MINIO_ROOT_PASSWORD','MINIO_DATA_DIR','MINIO_BINARY','MAILFLARE_ADMIN_EMAIL','MAILFLARE_ADMIN_PASSWORD','MAILFLARE_BRAND_NAME','MAILFLARE_RECEIVING_PROVIDER','WHATSAPP_ENABLED','WHATSAPP_MAX_SESSIONS']);
-export const secretKeys = new Set(['DATABASE_URL','REDIS_URL','RESEND_API_KEY','CF_TOKEN','INBOUND_WEBHOOK_SECRET','S3_SECRET_ACCESS_KEY','MINIO_ROOT_PASSWORD','MAILFLARE_ADMIN_PASSWORD','BUZZ_RELAY_PRIVATE_KEY','BUZZ_GIT_HOOK_HMAC_SECRET','BUZZ_S3_SECRET_KEY']);
+const keys = new Set(['NODE_ENV','MAILFLARE_RUNTIME','HOST','PORT','DATA_DIR','DATABASE_BACKEND','DATABASE_URL','DATABASE_POOL_SIZE','APP_URL','SMTP_INBOUND_PORT','RESEND_API_KEY','CF_TOKEN','CF_ACCOUNT_ID','CF_EMAIL_WORKER_NAME','INBOUND_WEBHOOK_SECRET','STORAGE_BACKEND','S3_ENDPOINT','S3_REGION','S3_BUCKET','S3_ACCESS_KEY_ID','S3_SECRET_ACCESS_KEY','MINIO_ROOT_USER','MINIO_ROOT_PASSWORD','MINIO_DATA_DIR','MINIO_BINARY','MAILFLARE_ADMIN_EMAIL','MAILFLARE_ADMIN_PASSWORD','MAILFLARE_BRAND_NAME','MAILFLARE_RECEIVING_PROVIDER','WHATSAPP_ENABLED','WHATSAPP_MAX_SESSIONS']);
+export const secretKeys = new Set(['DATABASE_URL','REDIS_URL','RESEND_API_KEY','CF_TOKEN','CF_ACCOUNT_ID','CF_EMAIL_WORKER_NAME','INBOUND_WEBHOOK_SECRET','S3_SECRET_ACCESS_KEY','MINIO_ROOT_PASSWORD','MAILFLARE_ADMIN_PASSWORD','BUZZ_RELAY_PRIVATE_KEY','BUZZ_GIT_HOOK_HMAC_SECRET','BUZZ_S3_SECRET_KEY']);
 export function readPrivateEnv(file) {
  if (!existsSync(file)) return {};
  if (lstatSync(file).isSymbolicLink()) throw new Error('Refusing a symbolic link configuration file.');
@@ -49,6 +49,7 @@ export function buildConfig(existing,patch,root) {
  if(!['resend','cloudflare'].includes(env.MAILFLARE_RECEIVING_PROVIDER) || !['true','false'].includes(env.WHATSAPP_ENABLED))throw new Error('Invalid receiving provider or WhatsApp flag.');
  let app;try{app=new URL(env.APP_URL);}catch{throw new Error('APP_URL must be an HTTP(S) origin.');}
  if(!['http:','https:'].includes(app.protocol) || app.username || app.password || app.pathname!=='/' || app.search || app.hash || (app.protocol==='http:' && !['localhost','127.0.0.1','[::1]'].includes(app.hostname)))throw new Error('APP_URL must be an HTTPS origin publicly, or HTTP loopback origin locally.');
+ if(env.CF_EMAIL_WORKER_NAME && !/^[a-zA-Z0-9_-]{1,63}$/.test(env.CF_EMAIL_WORKER_NAME))throw new Error('Invalid Cloudflare email relay Worker name.');
  if(env.MAILFLARE_ADMIN_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.MAILFLARE_ADMIN_EMAIL))throw new Error('A valid admin email is required.');
  if(env.MAILFLARE_ADMIN_PASSWORD && (env.MAILFLARE_ADMIN_PASSWORD.length<12 || Buffer.byteLength(env.MAILFLARE_ADMIN_PASSWORD)>72))throw new Error('Admin password must be 12+ characters and at most 72 bytes.');
  for(const key of ['DATA_DIR','MINIO_DATA_DIR','MINIO_BINARY'])env[key]=resolve(root,env[key]);

@@ -45,7 +45,7 @@ async function main() {
 	});
 
 	const whatsapp = process.env.WHATSAPP_ENABLED === "true"
-		? new WhatsAppRegistry(runtime.dataDir, Number(process.env.WHATSAPP_MAX_SESSIONS ?? 4))
+		? new WhatsAppRegistry(runtime.dataDir, Number(process.env.WHATSAPP_MAX_SESSIONS ?? 4), env.DB)
 		: undefined;
 	setWhatsAppRegistry(whatsapp);
 	if (whatsapp) await whatsapp.restore(async (userId) => !!await env.DB.prepare("SELECT id FROM users WHERE id = ? AND disabled = 0").bind(userId).first());

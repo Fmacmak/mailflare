@@ -22,6 +22,7 @@ interface CloudflareEnv {
 	LOGIN_RATE_LIMIT?: RateLimit;
 	AGENT_RATE_LIMIT?: RateLimit;
 	CF_TOKEN?: string;
+ CF_EMAIL_WORKER_NAME?: string;
 	RESEND_API_KEY?: string;
 	CF_API_KEY?: string;
 	CF_EMAIL?: string;

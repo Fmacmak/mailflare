@@ -14,7 +14,9 @@ await build({
 			export { SqliteDatabase } from "./server/runtime/sqlite-database.ts";
 			export { applyMigrations } from "./server/runtime/migrate.ts";
 			export { getDb } from "./src/db/index.ts";
-			export { createSession } from "./src/lib/auth/session.ts";
+			export { createSession, getUserFromSession } from "./src/lib/auth/session.ts";
+			export { verifyPassword } from "./src/lib/auth/password.ts";
+			export { getMailboxAccessLevel } from "./src/lib/mailboxes/access.ts";
 			export { generateApiKey } from "./src/lib/api-keys.ts";
 			export { createUserAccountSchema } from "./src/lib/validators.ts";
 			export { POST as dashboardCreate } from "./src/app/api/accounts/route.ts";
@@ -38,7 +40,7 @@ await build({
 	logLevel: "silent",
 });
 const {
-	SqliteDatabase, applyMigrations, getDb, createSession, generateApiKey, createUserAccountSchema,
+	SqliteDatabase, applyMigrations, getDb, createSession, getUserFromSession, verifyPassword, getMailboxAccessLevel, generateApiKey, createUserAccountSchema,
 	dashboardCreate, apiCreate, registerAdminMcpTools, getMailboxDomainAddresses, resolveInboundAddress, getAuthorizedSenderAddress,
 } = await import(pathToFileURL(join(directory, "entry.mjs")).href);
 const key = generateApiKey();
@@ -51,6 +53,7 @@ async function fixture(t, { rules = [], failAddress, slowAddress } = {}) {
 		INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES
 			('admin', 'owner@one.test', 'hash', 'Owner', 'admin', 1),
 			('other', 'owner@foreign.test', 'hash', 'Other', 'admin', 1);
+		UPDATE users SET is_primary_admin = 1 WHERE id = 'admin';
 		INSERT INTO domains (id, user_id, hostname, zone_id, status, created_at) VALUES
 			('one', 'admin', 'one.test', 'zone-one', 'active', 1),
 			('two', 'admin', 'two.test', 'zone-two', 'active', 1),
@@ -232,28 +235,48 @@ for (const enabled of [true, false]) {
 	});
 }
 
-test("account creation still enforces admin authorization and the Team license", async (t) => {
+test("account creation enforces authorization without requiring a license", async (t) => {
 	const f = await fixture(t);
 	assert.equal((await f.post("api", {}, "invalid-test-key")).status, 401);
 	assert.equal((await f.post("dashboard", {}, "invalid-test-session")).status, 403);
-	f.database.db.exec("UPDATE license_settings SET state = 'inactive'");
-	assert.equal((await f.post("api")).status, 403);
-	assert.equal((await f.post("dashboard")).status, 403);
 	assert.equal(f.calls.length, 0);
+	f.database.db.exec("DELETE FROM license_settings");
+	assert.equal((await f.post("api", { username: "alice" })).status, 201);
+	assert.equal((await f.post("dashboard", { username: "bob" })).status, 201);
 });
 
-test("a Pro license creates accounts only while seats remain; Team and unlimited Pro have no limit", async (t) => {
+test("legacy license state and seat limits do not restrict new accounts", async (t) => {
 	const f = await fixture(t);
-	const users = () => f.database.db.prepare("SELECT count(*) AS count FROM users WHERE disabled = 0").get().count;
-	f.database.db.exec(`UPDATE license_settings SET plan = 'pro', seat_limit = ${users()}`);
-	assert.equal((await f.post("api")).status, 403, "no seat left");
-	f.database.db.exec(`UPDATE license_settings SET seat_limit = ${users() + 1}`);
-	assert.equal((await f.post("api", { username: "seat-one" })).status, 201);
-	assert.equal((await f.post("api", { username: "seat-two" })).status, 403, "seat just used");
-	f.database.db.exec("UPDATE license_settings SET seat_limit = NULL");
-	assert.equal((await f.post("api", { username: "seat-three" })).status, 201);
-	f.database.db.exec("UPDATE license_settings SET plan = 'team', seat_limit = 1");
-	assert.equal((await f.post("api", { username: "seat-four" })).status, 201);
+	for (const [index, state] of ["inactive", "active", "expired"].entries()) {
+		f.database.db.prepare("UPDATE license_settings SET plan = 'pro', state = ?, seat_limit = 0").run(state);
+		assert.equal((await f.post("dashboard", { username: `person${index}` })).status, 201);
+	}
+});
+
+test("new email accounts have independent passwords, sessions, and private mailboxes", async (t) => {
+	const f = await fixture(t);
+	f.database.db.exec("UPDATE license_settings SET state = 'inactive'");
+	const accounts = [];
+	for (const username of ["alice", "bob"]) {
+		const password = `${username}-private-password`;
+		const response = await f.post("dashboard", { username, password, useAllDomains: false });
+		assert.equal(response.status, 201);
+		assert.equal("passwordHash" in (await response.json()).account, false);
+		const row = f.database.db.prepare("SELECT * FROM users WHERE email = ?").get(`${username}@one.test`);
+		assert.equal(verifyPassword(password, row.password_hash), true);
+		assert.equal(verifyPassword("someone-elses-password", row.password_hash), false);
+		const session = await createSession(f.env, row.id);
+		const user = await getUserFromSession(f.env, session);
+		assert.equal(user.email, `${username}@one.test`);
+		assert.equal(user.role, "user");
+		assert.equal((await f.post("dashboard", { username: "unauthorized" }, session)).status, 403);
+		const mailbox = f.database.db.prepare("SELECT id FROM mailboxes WHERE user_id = ?").get(row.id);
+		accounts.push({ user, mailbox });
+	}
+	for (const [index, account] of accounts.entries()) {
+		assert.equal((await getMailboxAccessLevel(f.db, account.user, account.mailbox.id)).isOwner, true);
+		assert.equal(await getMailboxAccessLevel(f.db, account.user, accounts[1 - index].mailbox.id), null);
+	}
 });
 
 for (const separateDomains of [false, true]) {

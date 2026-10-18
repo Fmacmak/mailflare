@@ -221,8 +221,7 @@ isolation. Membership, signing in and invitations happen in Buzz's own UI.
 Save its workspace URL in **Mailflare > Buzz** afterwards.
 
 Enable WhatsApp through `configure`, run `up`, then open **WhatsApp** and scan
-its QR with your phone. This manages pairing/sessions; conversation sync and
-sending are separate future work.
+its QR with your phone. This manages pairing/sessions, personal and group chat history, and text sending. Media previews show captions and type; open WhatsApp to view or send media.
 
 After verifying the services, use `pm2 save` and your existing macOS PM2/launchd
 startup arrangement. `pm2 startup` prints the required platform command. Keep
@@ -243,3 +242,34 @@ data. Resolve occupied ports, wrong database credentials, missing binaries or
 compilation failures, then continue with the corresponding CLI command. A
 healthy local installation still needs a real inbound/outbound mail check after
 its public hostname and DNS/provider configuration are ready.
+
+## Cloudflare API token onboarding on a native host
+
+Set `CF_TOKEN` privately through `configure` (hidden prompt) or `--input-json`, and
+set `CF_EMAIL_WORKER_NAME=mailflare-email-relay` after deploying that relay.
+The runtime uses this server-side token to create address routes when an admin
+creates accounts or aliases. New users never need the token. Create users from
+**Admin > Accounts**, select the configured domain, and give each user their own
+initial login. Public registration remains closed after the first admin.
+
+For this installation's existing remotely managed macOS tunnel, the explicit
+setup command below deploys the relay, preserves existing ingress, adds a mail
+hostname, and attaches the existing domain to Cloudflare. It reads the token
+from the private `.cloudflare-setup-token` file (or `CLOUDFLARE_API_TOKEN`), not
+command-line arguments. The setup token needs Workers Scripts Edit and
+Cloudflare Tunnel Edit on the target account, plus DNS Edit, Email Routing Rules
+Edit, Zone Settings Edit and Zone Read on the chosen zone. Worker/tunnel permissions are needed only
+for infrastructure setup; routine user onboarding needs the zone permissions.
+
+```sh
+node scripts/cloudflare-setup.mjs ACCOUNT_ID ZONE_ID mail.example.com
+node scripts/selfhost.mjs up
+```
+
+After the public login page is reachable, run **Admin > Domains > Receiving >
+Cloudflare > Setup** to enable the receiving DNS and Worker routes. Other
+providers' MX records require explicit replacement confirmation. The setup
+script refuses to overwrite a hostname or Worker owned by another application
+and saves the previous tunnel configuration privately under
+`data/cloudflare-setup`. Outgoing email needs a separately configured sending
+provider; Email Routing alone does not enable outbound sending.

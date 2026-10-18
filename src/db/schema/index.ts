@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, uniqueIndex, primaryKey, foreignKey } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
@@ -687,7 +687,7 @@ export const appSettings = sqliteTable("app_settings", {
 	iconKey: text("icon_key"),
 	agentEnabled: integer("agent_enabled", { mode: "boolean" }).notNull().default(true),
 	agentProvider: text("agent_provider", { enum: ["cloudflare", "compatible"] }),
-	agentPreset: text("agent_preset", { enum: ["openai", "openrouter", "groq", "custom"] }),
+	agentPreset: text("agent_preset", { enum: ["openai", "openrouter", "groq", "vercel", "custom"] }),
 	agentBaseUrl: text("agent_base_url"),
 	agentApiKey: text("agent_api_key"),
 	agentModel: text("agent_model"),
@@ -920,3 +920,13 @@ export const schema = {
 	agentSendApprovals,
 	mcpKeyMailboxes,
 };
+
+export const whatsappChats = sqliteTable("whatsapp_chats", {
+ userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+ jid: text("jid").notNull(), name: text("name").notNull().default(""), updatedAt: integer("updated_at").notNull().default(0),
+}, t => [primaryKey({columns:[t.userId,t.jid]})]);
+export const whatsappMessages = sqliteTable("whatsapp_messages", {
+ userId:text("user_id").notNull(), jid:text("jid").notNull(), messageId:text("message_id").notNull(), fromMe:integer("from_me").notNull().default(0),
+ sender:text("sender").notNull().default(""), textBody:text("text_body").notNull().default(""), kind:text("kind").notNull().default("text"),
+ timestamp:integer("timestamp").notNull(),status:integer("status").notNull().default(0),rawJson:text("raw_json"),
+},t=>[primaryKey({columns:[t.userId,t.jid,t.messageId,t.fromMe]}),foreignKey({columns:[t.userId,t.jid],foreignColumns:[whatsappChats.userId,whatsappChats.jid]}).onDelete("cascade"),index("whatsapp_messages_history_idx").on(t.userId,t.jid,t.timestamp)]);

@@ -64,3 +64,16 @@ skills-lock.json
 /dist/
 
 !.env.selfhosted.example
+
+# Private credentials produced during local setup
+/.cloudflare-setup-token
+/.resend-mailflare-key
+/.mailflare-initial-login.txt
+
+# Local service logs and database snapshots
+/logs/
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*

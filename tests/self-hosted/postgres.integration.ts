@@ -7,8 +7,9 @@ import { PostgresDatabase } from '../../server/runtime/postgres-database';
 import { SqliteDatabase } from '../../server/runtime/sqlite-database';
 import { applyMigrations } from '../../server/runtime/migrate';
 import { bootstrapAdmin } from '../../server/runtime/bootstrap';
+import { WhatsAppMessages } from '../../server/runtime/whatsapp-messages';
 import { createDb } from '../../src/db';
-import { users,mailboxes,messages,domains } from '../../src/db/schema';
+import { users,mailboxes,messages,domains,appSettings } from '../../src/db/schema';
 import { exportDatabaseRecords,restoreDatabaseRecords } from '../../src/lib/backups/export';
 import { buildSearchConditions } from '../../src/lib/search/conditions';
 import { getMigrationStatus,applyPendingMigrations } from '../../src/lib/migrations/service';
@@ -34,7 +35,7 @@ test('PostgreSQL migrations, D1/Drizzle mapping, search, triggers, rollback, SQL
  const sqlite=new SqliteDatabase(':memory:');
  try {
   assert.equal((await getMigrationStatus(d1)).ready,false);
-  assert.equal((await applyMigrations(database,'drizzle/migrations')).length,4);
+  assert.equal((await applyMigrations(database,'drizzle/migrations')).length,5);
   assert.deepEqual(await applyMigrations(database,'drizzle/migrations'),[]);
   assert.equal((await getMigrationStatus(d1)).ready,true);
   assert.deepEqual((await applyPendingMigrations(d1)).applied,[]);
@@ -49,6 +50,8 @@ test('PostgreSQL migrations, D1/Drizzle mapping, search, triggers, rollback, SQL
   assert.equal((await bootstrapAdmin(database,input)).email,input.email);
   await assert.rejects(async()=>bootstrapAdmin(database,input),/already exists/);
   const db=createDb(d1);
+  await db.insert(appSettings).values({id:'default',resendApiKey:'integration-test-placeholder',updatedAt:new Date()}).onConflictDoUpdate({target:appSettings.id,set:{resendApiKey:'integration-test-placeholder',updatedAt:new Date()}});
+  assert.equal(await d1.prepare('SELECT resend_api_key FROM app_settings WHERE id=?').bind('default').first('resend_api_key'),'integration-test-placeholder');
   const [user]=await db.select().from(users);
   assert.equal(user.isPrimaryAdmin,true);assert.equal(user.disabled,false);assert.ok(user.createdAt instanceof Date);
   const [mailbox]=await db.select().from(mailboxes);
@@ -91,9 +94,14 @@ test('PostgreSQL migrations, D1/Drizzle mapping, search, triggers, rollback, SQL
    d1.prepare("INSERT INTO drive_upload_parts(item_id,part_number,etag) VALUES ('pg_drive',1,'test-etag')"),
   ]);
   await d1.prepare("INSERT INTO buzz_connections(user_id,team_name,relay_url,web_url,updated_at) VALUES (?,'PG team','wss://buzz.example.test','https://buzz.example.test',1)").bind(user.id).run();
+  const whatsapp=new WhatsAppMessages(d1);
+  await whatsapp.ingest(user.id,[{key:{id:'test_wa_message',remoteJid:'123@s.whatsapp.net',fromMe:false},messageTimestamp:123,message:{conversation:'PostgreSQL chat check'}}]);
+  assert.equal((await whatsapp.chats(user.id)).length,1);
+  assert.equal((await whatsapp.messages(user.id,'123@s.whatsapp.net'))[0].text,'PostgreSQL chat check');
   const pgBackup=await exportDatabaseRecords(d1);
   await restoreDatabaseRecords(d1,pgBackup.buffer as ArrayBuffer);
   assert.equal((await db.select().from(messages)).length,2);
+  assert.equal((await whatsapp.messages(user.id,'123@s.whatsapp.net')).length,1);
   assert.equal(await d1.prepare('SELECT count(*) FROM drive_upload_parts').first('count'),1);
   assert.equal(await d1.prepare('SELECT team_name FROM buzz_connections').first('team_name'),'PG team');
   assert.deepEqual(await search('receipt'),['pg_m1']);

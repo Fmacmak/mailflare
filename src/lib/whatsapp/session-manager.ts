@@ -7,7 +7,7 @@ export type SocketUpdate = {
 	loggedOut?: boolean;
 	restartRequired?: boolean;
 };
-export type SessionSocket = { close(): Promise<void>; logout(): Promise<void> };
+export type SessionSocket = { close(): Promise<void>; logout(): Promise<void>; sendText?(jid: string, text: string): Promise<unknown>; history?(jid?: string): Promise<void> };
 export type SessionTransport = {
 	open(userId: string, update: (event: SocketUpdate) => void): Promise<SessionSocket>;
 	erase(userId: string): Promise<void>;
@@ -191,6 +191,16 @@ export class WhatsAppSessionManager {
 			s.timer.unref?.();
 		}
 	}
+	async sendText(userId: string, jid: string, text: string) {
+        const s = this.sessions.get(userId);
+        if (s?.state !== "connected" || !s.socket?.sendText) throw new Error("WhatsApp must be connected");
+        return s.socket.sendText(jid, text);
+    }
+    async history(userId: string, jid?: string) {
+        const s = this.sessions.get(userId);
+        if (s?.state !== "connected" || !s.socket?.history) throw new Error("WhatsApp must be connected");
+        return s.socket.history(jid);
+    }
 	async disconnect(userId: string) {
 		return this.serialized(userId, () => this.disconnectSession(userId));
 	}

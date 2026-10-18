@@ -5,6 +5,7 @@ import { MessageCircle, QrCode, RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client";
 import type { WhatsAppStatus } from "@/lib/whatsapp/types";
+import WhatsAppChats from "./chats";
 const labels: Record<WhatsAppStatus["state"], string> = {
 	disconnected: "Not connected",
 	connecting: "Connecting…",
@@ -53,7 +54,7 @@ export default function WhatsAppPage() {
 	}
 	const pairing = status && ["connecting", "pairing", "reconnecting"].includes(status.state);
 	return (
-		<div className="mx-auto max-w-3xl p-6 md:p-10">
+		<div className="mx-auto max-w-6xl p-6 md:p-10">
 			<div className="mb-8 flex items-center gap-3">
 				<div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
 					<MessageCircle className="h-7 w-7" />
@@ -148,9 +149,10 @@ export default function WhatsAppPage() {
 					) : null}
 				</div>
 			</section>
+            {status?.available && <WhatsAppChats connected={status.state === "connected"}/>}
 			<p className="mt-5 text-sm text-slate-500">
-				This connects a linked device using Baileys. Connection management is available here;
-				WhatsApp conversations and sending will be added separately. Disconnecting removes the saved
+				This connects a linked device using Baileys.
+				Read synced chats and send text messages below. Disconnecting removes the saved
 				session from this server.
 			</p>
 		</div>

@@ -24,7 +24,7 @@ export function formatUsageDate(value: string) {
 }
 
 export function formatUsageProvider(value: string) {
-	return ({ cloudflare: "Cloudflare Workers AI", openai: "OpenAI", openrouter: "OpenRouter", groq: "Groq", custom: "Custom API" } as Record<string, string>)[value] ?? value;
+	return ({ cloudflare: "Cloudflare Workers AI", openai: "OpenAI", openrouter: "OpenRouter", groq: "Groq", vercel: "Vercel AI Gateway", custom: "Custom API" } as Record<string, string>)[value] ?? value;
 }
 
 export function fillDailyUsage(days: AiUsageDaily[], timeZone = getUserTimeZone()): AiUsageDaily[] {

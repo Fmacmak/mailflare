@@ -263,3 +263,12 @@ test("New pairing waits for an expired socket to finish closing", async () => {
 	assert.equal(opens, 2);
 	await manager.close();
 });
+test('Sending uses only the connected owner socket and rejects disconnected sessions',async()=>{
+ assert.ok(module);const sent:string[]=[];const updates=new Map<string,(e:any)=>void>();
+ const manager=new module!.WhatsAppSessionManager({open:async(id,update)=>{updates.set(id,update);return {close:async()=>{},logout:async()=>{},sendText:async(jid:string,text:string)=>{sent.push(id+':'+jid+':'+text);return {id:'sent'};}};},erase:async()=>{}});
+ assert.equal(typeof (manager as any).sendText,'function','sending is implemented');
+ await manager.connect('alice');updates.get('alice')!({connected:true});
+ await (manager as any).sendText('alice','123@s.whatsapp.net','hello');
+ await assert.rejects(()=>(manager as any).sendText('bob','123@s.whatsapp.net','hello'),/connected/);
+ assert.deepEqual(sent,['alice:123@s.whatsapp.net:hello']);await manager.close();
+});

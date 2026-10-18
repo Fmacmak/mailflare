@@ -24,11 +24,12 @@ function cloudflareRates(properties: unknown): AgentModelRates | undefined {
 	return input === null || output === null ? undefined : { input, output };
 }
 
-// OpenRouter publishes pricing.prompt / pricing.completion as USD per token (strings). Other providers omit pricing.
-function openRouterRates(pricing: unknown): AgentModelRates | undefined {
+// OpenRouter and Vercel AI Gateway publish USD per-token prices as strings.
+function compatibleRates(pricing: unknown, preset: AgentProviderPreset): AgentModelRates | undefined {
 	if (!pricing || typeof pricing !== "object") return undefined;
-	const input = perMillion((pricing as { prompt?: unknown }).prompt, true);
-	const output = perMillion((pricing as { completion?: unknown }).completion, true);
+	const prices = pricing as Record<string, unknown>;
+	const input = perMillion(prices[preset === "vercel" ? "input" : "prompt"], true);
+	const output = perMillion(prices[preset === "vercel" ? "output" : "completion"], true);
 	return input === null || output === null ? undefined : { input, output };
 }
 
@@ -50,8 +51,8 @@ export async function listCompatibleAgentModels(env: CloudflareEnv, input: { pre
 	if (!key) throw new Error("Enter an API key to load models");
 	const response = await fetch(`${baseUrl}/models`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: AbortSignal.timeout(10_000), redirect: "manual" });
 	if (!response.ok) throw new Error(`Model list request failed (${response.status})`);
-	const json = await response.json() as { data?: { id?: unknown; name?: unknown; pricing?: unknown }[] };
-	const models = (json.data ?? []).filter((item) => typeof item.id === "string" && item.id.length <= 200).map((item) => ({ id: item.id as string, name: typeof item.name === "string" ? item.name : item.id as string, rates: input.preset === "openrouter" ? openRouterRates(item.pricing) : undefined })).slice(0, 2_000).sort((a, b) => a.name.localeCompare(b.name));
+	const json = await response.json() as { data?: { id?: unknown; name?: unknown; type?: unknown; pricing?: unknown }[] };
+	const models = (json.data ?? []).filter((item) => typeof item.id === "string" && item.id.length <= 200 && (input.preset !== "vercel" || item.type === "language")).map((item) => ({ id: item.id as string, name: typeof item.name === "string" ? item.name : item.id as string, rates: (input.preset === "openrouter" || input.preset === "vercel") ? compatibleRates(item.pricing, input.preset) : undefined })).slice(0, 2_000).sort((a, b) => a.name.localeCompare(b.name));
 	if (!models.length) throw new Error("Provider returned no models");
 	return { models, source: "catalog" as const };
 }

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,28 +16,14 @@ function stripComments(src) {
 	return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
-test("shouldBindEmailCatchAllToWorker inverts isNodeRuntime (issue #42)", () => {
-	const src = provisionSrc();
-	assert.match(
-		src,
-		/export function shouldBindEmailCatchAllToWorker\s*\(\s*env[^)]*\)[\s\S]*?\{\s*return !isNodeRuntime\(env\);\s*\}/,
-		"provision.ts must export shouldBindEmailCatchAllToWorker as !isNodeRuntime(env)",
-	);
-
-	const runtime = read("src/lib/runtime.ts");
-	assert.match(
-		runtime,
-		/MAILFLARE_RUNTIME === "node"/,
-		"isNodeRuntime must keep detecting MAILFLARE_RUNTIME=node",
-	);
-
-	const isNodeRuntime = (env) => (env ?? undefined)?.MAILFLARE_RUNTIME === "node";
-	const shouldBindEmailCatchAllToWorker = (env) => !isNodeRuntime(env);
-
-	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_RUNTIME: "node" }), false);
-	assert.equal(shouldBindEmailCatchAllToWorker({ MAILFLARE_RUNTIME: "cloudflare" }), true);
-	assert.equal(shouldBindEmailCatchAllToWorker({}), true);
-	assert.equal(shouldBindEmailCatchAllToWorker(undefined), true);
+test("Node skips catch-all without a relay and binds explicitly configured relays", () => {
+ execFileSync(process.execPath,["--import","tsx","--input-type=module","-e",`
+  import assert from 'node:assert/strict';
+  import {shouldBindEmailCatchAllToWorker as bind} from './src/lib/domains/provision.ts';
+  assert.equal(bind({MAILFLARE_RUNTIME:'node'}),false);
+  assert.equal(bind({MAILFLARE_RUNTIME:'node',CF_EMAIL_WORKER_NAME:'mailflare-email-relay'}),true);
+  assert.equal(bind({}),true);
+ `],{cwd:root});
 });
 
 test("provision.ts imports isNodeRuntime next to hasCloudflareCredentials", () => {
